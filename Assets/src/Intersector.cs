@@ -46,6 +46,24 @@ namespace src
             _tangents = new List<Vector4>();
         }
 
+        public Intersector(Vector3 planePoint,
+            Vector3 planeNormal, GameObject srcObject, Mesh mesh, List<int> triangles)
+        {
+            _planeNormal = planeNormal;
+            _planePoint = planePoint;
+            _srcObject = srcObject;
+            _mesh = mesh;
+
+            _verts = new List<Vector3>(mesh.vertices);
+
+            _normals = new List<Vector3>(mesh.normals);
+
+            _uvs = new List<Vector2>(mesh.uv);
+
+            _tangents = new List<Vector4>(mesh.tangents);
+            
+            _triangles = triangles;
+        }
         private Vector3 IntersectionPlaneLinePoint(Vector3 pointF, Vector3 pointS, Vector3 planePoint,
             Vector3 planeNormal)
         {
