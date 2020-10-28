@@ -1,5 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace src
 {
@@ -10,12 +12,20 @@ namespace src
         private GameObject _lowerObj;
         private GameObject _upperObj;
 
+        public Slicer(Mesh mesh, GameObject gameObject,GameObject lowerObj,GameObject upperObj)
+        {
+            // one time slice
+            _mesh = mesh;
+            _srcObject = gameObject;
+            _lowerObj = lowerObj;
+            _upperObj = upperObj;
+        }
         public Slicer(Mesh mesh, GameObject gameObject)
         {
+            // updatable slice
             _mesh = mesh;
             _srcObject = gameObject;
         }
-
         public void Destroy()
         {
             Object.Destroy(_lowerObj);
@@ -27,19 +37,43 @@ namespace src
             return Vector3.Dot(planePoint - point, planeNormal) < 0;
         }
 
-        public void Slice(Vector3 slicerNormal, Vector3 slicerPoint, bool shouldDisplayLowerSide,
+        public void OneTimeSlice(Vector3 slicerNormal, Vector3 slicerPoint, bool shouldDisplayLowerSide,
             bool shouldDisplayUpperSide)
+        {
+            if (_lowerObj == null || _upperObj == null)
+            {
+                throw new Exception("Your didn't pass lower and upper objects, but try to create onetime slice");    
+            }
+            
+            Slice(slicerNormal, slicerPoint, shouldDisplayLowerSide, shouldDisplayUpperSide, out Intersector interLow, out Intersector interUp);
+            
+            if (shouldDisplayLowerSide) _lowerObj.GetComponent<MeshFilter>().sharedMesh = interLow.CreateMesh();
+            // else _lowerObj.SetActive(false);//Object.Destroy(_lowerObj);
+            
+            if (shouldDisplayUpperSide) _upperObj.GetComponent<MeshFilter>().sharedMesh = interUp.CreateMesh();
+            // else _upperObj.SetActive(false);//Object.Destroy(_upperObj);
+        }
+        
+
+        public void UpdatableSlice(Vector3 slicerNormal, Vector3 slicerPoint, bool shouldDisplayLowerSide)
+        {
+            Slice(slicerNormal, slicerPoint, shouldDisplayLowerSide, !shouldDisplayLowerSide, out Intersector interLow, out Intersector interUp);
+
+            if (shouldDisplayLowerSide) UpdateMesh(ref _lowerObj, interLow);
+            else UpdateMesh(ref _upperObj, interUp);
+        }
+        
+        private void Slice(Vector3 slicerNormal, Vector3 slicerPoint, bool shouldDisplayLowerSide,
+            bool shouldDisplayUpperSide, out Intersector interLow, out Intersector interUp)
         {
             var srcVerts = _mesh.vertices;
             var srcEbo = _mesh.triangles;
 
             var lowerEbo = new List<int>();
             var upperEbo = new List<int>();
-            var upperMesh = Object.Instantiate(_mesh);
-            var lowerMesh = Object.Instantiate(_mesh);
 
-            var interLow = new Intersector(slicerPoint, slicerNormal, _srcObject, _mesh);
-            var interUp = new Intersector(slicerPoint, slicerNormal, _srcObject, _mesh);
+            interLow = new Intersector(slicerPoint, slicerNormal, _srcObject, _mesh, lowerEbo);
+            interUp = new Intersector(slicerPoint, slicerNormal, _srcObject, _mesh, upperEbo);
             for (var i = 0; i < _mesh.triangles.Length; i += 3)
             {
                 var objVert1 = _srcObject.transform.TransformPoint(srcVerts[srcEbo[i]]);
@@ -79,13 +113,9 @@ namespace src
                             !isThirdLower);
                 }
             }
-
-            if (shouldDisplayLowerSide) UpdateMesh(ref _lowerObj, interLow, lowerMesh, lowerEbo);
-
-            if (shouldDisplayUpperSide) UpdateMesh(ref _upperObj, interUp, upperMesh, upperEbo);
         }
 
-        private void UpdateMesh(ref GameObject borderObj, Intersector intersector, Mesh mesh, List<int> triangles)
+        private void UpdateMesh(ref GameObject borderObj, Intersector intersector)
         {
             borderObj = Object.Instantiate(_srcObject, _srcObject.transform.parent);
             foreach (Transform child in borderObj.transform) {
@@ -93,13 +123,13 @@ namespace src
             }
             
             borderObj.GetComponent<MeshFilter>().sharedMesh = intersector.CreateMesh();
-
-            mesh.triangles = triangles.ToArray();
-            _srcObject.GetComponent<MeshFilter>().sharedMesh = mesh;
+            borderObj.GetComponent<Renderer>().enabled = true;
 
             borderObj.transform.position = _srcObject.transform.position;
             borderObj.transform.rotation = _srcObject.transform.rotation;
             borderObj.transform.localScale = _srcObject.transform.localScale;
+            
+            _srcObject.GetComponent<Renderer>().enabled = false;
         }
 
         private void CreateTriangle(Intersector inter, int i, Vector3 objVert1, Vector3 objVert2, Vector3 objVert3,
