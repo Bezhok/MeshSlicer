@@ -15,16 +15,63 @@ namespace src
         private readonly List<int> _triangles;
         private readonly List<Vector2> _uvs;
         private readonly List<Vector3> _verts;
+        private readonly WholeSlicePlane _wholeSlicePlane;
 
         public Mesh CreateMesh()
         {
+            var slicePlane = _wholeSlicePlane.CreateSlicePlane();
+            var localNormal = _srcObject.transform.InverseTransformPoint(_planeNormal);
+            
+            bool isClockwiseOrder = false;
+            for (int i = 0; i < slicePlane.Count; i++)
+            {
+                for (int j = 0; j < slicePlane[i].Count; j++)
+                {
+                    int n = _verts.Count;
+                    if (j ==0 &&  i == 0)
+                    {
+                        isClockwiseOrder =
+                            Triangulator.IsVertConvex(slicePlane[i][j].A, slicePlane[i][j].B, slicePlane[i][j].C);
+                    }
+
+                    if (isClockwiseOrder)
+                    {
+                        _verts.Add(slicePlane[i][j].A.v3);
+                        _verts.Add(slicePlane[i][j].B.v3);
+                        _verts.Add(slicePlane[i][j].C.v3);
+                    }
+                    else
+                    {
+                        _verts.Add(slicePlane[i][j].C.v3);
+                        _verts.Add(slicePlane[i][j].B.v3);
+                        _verts.Add(slicePlane[i][j].A.v3);
+                    }
+
+                    _triangles.Add(n);
+                    _triangles.Add(n+1);
+                    _triangles.Add(n+2);
+                    
+                    _normals.Add(localNormal);
+                    _normals.Add(localNormal);
+                    _normals.Add(localNormal);
+                    
+                    _tangents.Add(new Vector4());
+                    _tangents.Add(new Vector4());
+                    _tangents.Add(new Vector4());
+                    
+                    _uvs.Add(new Vector2());
+                    _uvs.Add(new Vector2());
+                    _uvs.Add(new Vector2());
+                }
+            }
+            
             var newMesh = new Mesh();
             newMesh.vertices = _verts.ToArray();
             newMesh.normals = _normals.ToArray();
             newMesh.uv = _uvs.ToArray();
             newMesh.triangles = _triangles.ToArray();
             newMesh.tangents = _tangents.ToArray();
-
+            
             return newMesh;
         }
         public Intersector(Vector3 planePoint,
@@ -34,15 +81,12 @@ namespace src
             _planePoint = planePoint;
             _srcObject = srcObject;
             _mesh = mesh;
-
+            _wholeSlicePlane = new WholeSlicePlane(srcObject.transform.InverseTransformPoint(planeNormal));
+            
             _verts = new List<Vector3>();
-
             _normals = new List<Vector3>();
-
             _uvs = new List<Vector2>();
-
             _triangles = new List<int>();
-
             _tangents = new List<Vector4>();
         }
 
@@ -53,17 +97,15 @@ namespace src
             _planePoint = planePoint;
             _srcObject = srcObject;
             _mesh = mesh;
-
-            _verts = new List<Vector3>(mesh.vertices);
-
-            _normals = new List<Vector3>(mesh.normals);
-
-            _uvs = new List<Vector2>(mesh.uv);
-
-            _tangents = new List<Vector4>(mesh.tangents);
+            _wholeSlicePlane = new WholeSlicePlane(srcObject.transform.InverseTransformPoint(planeNormal));
             
+            _verts = new List<Vector3>(mesh.vertices);
+            _normals = new List<Vector3>(mesh.normals);
+            _uvs = new List<Vector2>(mesh.uv);
+            _tangents = new List<Vector4>(mesh.tangents);
             _triangles = triangles;
         }
+
         private Vector3 IntersectionPlaneLinePoint(Vector3 pointF, Vector3 pointS, Vector3 planePoint,
             Vector3 planeNormal)
         {
@@ -91,6 +133,8 @@ namespace src
             var localIntersectionPoint1 = _srcObject.transform.InverseTransformPoint(intersectionPoint1);
             var localIntersectionPoint2 = _srcObject.transform.InverseTransformPoint(intersectionPoint2);
 
+            _wholeSlicePlane.AddSlicePlanePoints(localIntersectionPoint1, localIntersectionPoint2);
+            
             var localRightPoint1 = _srcObject.transform.InverseTransformPoint(rightPoint1);
             var localRightPoint2 = _srcObject.transform.InverseTransformPoint(rightPoint2);
 
@@ -150,6 +194,8 @@ namespace src
             var localIntersectionPoint1 = _srcObject.transform.InverseTransformPoint(intersectionPoint1);
             var localIntersectionPoint2 = _srcObject.transform.InverseTransformPoint(intersectionPoint2);
 
+            _wholeSlicePlane.AddSlicePlanePoints(localIntersectionPoint1, localIntersectionPoint2);
+            
             var localRightPoint1 = _srcObject.transform.InverseTransformPoint(rightPoint1);
 
             AddTangents(_mesh.tangents[_mesh.triangles[i + n0]],

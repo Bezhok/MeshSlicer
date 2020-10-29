@@ -4,17 +4,17 @@ namespace src
 {
     public class Triangle
     {
-        public Triangle(Vector2 a, Vector2 b, Vector2 c)
+        public Triangle(MappedPoint a, MappedPoint b, MappedPoint c)
         {
             A = a;
             B = b;
             C = c;
         }
 
-        public Vector2 A { get; }
+        public MappedPoint A { get; }
 
-        public Vector2 B { get; }
+        public MappedPoint B { get; }
 
-        public Vector2 C { get; }
+        public MappedPoint C { get; }
     }
 }

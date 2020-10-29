@@ -6,7 +6,32 @@ ModelImporter:
   - first:
       74: 1989289236423521904
     second: Default Take
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Fire_001__handgun_Fire_png
+    second: {fileID: 2100000, guid: 292580c905c0e7049a0beeb2b2eba722, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Material_001__handgun_Fire_png
+    second: {fileID: 2100000, guid: a91edcebe8fd3484a86c36491bd51d50, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Material_004
+    second: {fileID: 2100000, guid: fba331dcd5c30cd4c844c7cb86e8b2b9, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: handgun__handgun_C_jpg
+    second: {fileID: 2100000, guid: 923e2f3cb584a534bb098bdfb620484f, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: handgun__handgun_S_jpg
+    second: {fileID: 2100000, guid: 7b4ab4fab650f6f4aa7babbb7d9b955d, type: 2}
   materials:
     materialImportMode: 1
     materialName: 0

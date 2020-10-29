@@ -11,7 +11,7 @@ namespace src
         private readonly GameObject _srcObject;
         private GameObject _lowerObj;
         private GameObject _upperObj;
-
+        
         public Slicer(Mesh mesh, GameObject gameObject,GameObject lowerObj,GameObject upperObj)
         {
             // one time slice
@@ -53,7 +53,6 @@ namespace src
             if (shouldDisplayUpperSide) _upperObj.GetComponent<MeshFilter>().sharedMesh = interUp.CreateMesh();
             // else _upperObj.SetActive(false);//Object.Destroy(_upperObj);
         }
-        
 
         public void UpdatableSlice(Vector3 slicerNormal, Vector3 slicerPoint, bool shouldDisplayLowerSide)
         {
@@ -113,6 +112,8 @@ namespace src
                             !isThirdLower);
                 }
             }
+            
+            
         }
 
         private void UpdateMesh(ref GameObject borderObj, Intersector intersector)
