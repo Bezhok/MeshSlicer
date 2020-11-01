@@ -32,7 +32,7 @@ namespace src
             Object.Destroy(_upperObj);
         }
 
-        private bool IsPointLower(Vector3 point, Vector3 planePoint, Vector3 planeNormal)
+        public static bool IsPointLower(Vector3 point, Vector3 planePoint, Vector3 planeNormal)
         {
             return Vector3.Dot(planePoint - point, planeNormal) < 0;
         }
@@ -73,7 +73,9 @@ namespace src
 
             interLow = new Intersector(slicerPoint, slicerNormal, _srcObject, _mesh, lowerEbo);
             interUp = new Intersector(slicerPoint, slicerNormal, _srcObject, _mesh, upperEbo);
-            for (var i = 0; i < _mesh.triangles.Length; i += 3)
+
+            int len = _mesh.triangles.Length;
+            for (var i = 0; i < len; i += 3)
             {
                 var objVert1 = _srcObject.transform.TransformPoint(srcVerts[srcEbo[i]]);
                 var objVert2 = _srcObject.transform.TransformPoint(srcVerts[srcEbo[i + 1]]);
@@ -106,16 +108,14 @@ namespace src
                     if (shouldDisplayLowerSide)
                         CreateTriangle(interLow, i, objVert1, objVert2, objVert3, isFirstLower, isSecondLower,
                             isThirdLower);
-
+                    
                     if (shouldDisplayUpperSide)
                         CreateTriangle(interUp, i, objVert1, objVert2, objVert3, !isFirstLower, !isSecondLower,
                             !isThirdLower);
                 }
             }
-            
-            
         }
-
+        
         private void UpdateMesh(ref GameObject borderObj, Intersector intersector)
         {
             borderObj = Object.Instantiate(_srcObject, _srcObject.transform.parent);
