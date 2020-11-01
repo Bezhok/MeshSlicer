@@ -7,12 +7,11 @@ namespace src
     public class SliceHierarchy
     {
         public LinkedList<MappedPoint> _points = new LinkedList<MappedPoint>();
-        private TreeNode<LinkedList<Vector2>> _tree;
+        public List<SliceHierarchy> childs = new List<SliceHierarchy>();
+
+        public SliceHierarchy father = null;
+        public float maxX;
         
-        // public SliceHierarchy(LinkedList<Vector2> points)
-        // {
-        //     _points = points; 
-        //     _tree = new TreeNode<LinkedList<Vector2>>(_points);
-        // }
+        public int level = 0; 
     }
 }
