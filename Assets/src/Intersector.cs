@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using Plugins;
 using UnityEngine;
 
@@ -6,7 +7,6 @@ namespace src
 {
     public class Intersector
     {
-        private readonly Mesh _mesh;
         private readonly List<Vector3> _normals;
         private readonly Vector3 _planeNormal;
         private readonly Vector3 _planePoint;
@@ -18,66 +18,47 @@ namespace src
         private readonly List<Vector3> _verts;
         private readonly WholeSlicePlane _wholeSlicePlane;
 
+        private void CreatePlaneSliceTriangle(Triangle triangle, Vector3 normal, int t0, int t1, int t2)
+        {
+            _verts.Add(triangle.A.v3);
+            _verts.Add(triangle.B.v3);
+            _verts.Add(triangle.C.v3);
+            
+            _triangles.Add(t0);
+            _triangles.Add(t1);
+            _triangles.Add(t2);
+                    
+            _normals.Add(normal);
+            _normals.Add(normal);
+            _normals.Add(normal);
+
+            if (_tangents.Any())
+            {
+                _tangents.Add(new Vector4());
+                _tangents.Add(new Vector4());
+                _tangents.Add(new Vector4());
+            }
+
+            if (_uvs.Any())
+            {
+                _uvs.Add(new Vector2());
+                _uvs.Add(new Vector2());
+                _uvs.Add(new Vector2());
+            }
+        }
         public Mesh CreateMesh()
         {
             var slicePlane = _wholeSlicePlane.CreateSlicePlane();
             var localNormal = _srcObject.transform.InverseTransformDirection(_planeNormal);
             
-            bool isClockwiseOrder = false;
-            bool isPointLower=false;
+            //TODO
             for (int i = 0; i < slicePlane.Count; i++)
             {
                 for (int j = 0; j < slicePlane[i].Count; j++)
                 {
                     int n = _verts.Count;
-                    if (j ==0 &&  i == 0)
-                    {
-                        isPointLower = Slicer.IsPointLower(slicePlane[i][j].A.v3 + localNormal, slicePlane[i][j].A.v3, localNormal);
-                        isClockwiseOrder =
-                            Triangulator.IsVertConvex(
-                                (slicePlane[i][j].A.v2),
-                                (slicePlane[i][j].B.v2),
-                                (slicePlane[i][j].C.v2));
-                        
-                        var nor = Vector3.Cross(slicePlane[i][j].B.v3 - slicePlane[i][j].A.v3,
-                            slicePlane[i][j].C.v3 - slicePlane[i][j].B.v3);
-
-                        Debug.Log(nor.normalized);
-                        Debug.Log(localNormal.normalized);
-                        isClockwiseOrder = Vector3.Dot(nor, localNormal) <= 0;
-                    }
-
-                    if (isClockwiseOrder )
-                    {
-                    
-                            
-                        _verts.Add(slicePlane[i][j].A.v3);
-                        _verts.Add(slicePlane[i][j].B.v3);
-                        _verts.Add(slicePlane[i][j].C.v3);
-                    }
-                    else
-                    {
-                        _verts.Add(slicePlane[i][j].C.v3);
-                        _verts.Add(slicePlane[i][j].B.v3);
-                        _verts.Add(slicePlane[i][j].A.v3);
-                    }
-                    
-                    _triangles.Add(n);
-                    _triangles.Add(n+1);
-                    _triangles.Add(n+2);
-                    
-                    _normals.Add(-localNormal);
-                    _normals.Add(-localNormal);
-                    _normals.Add(-localNormal);
-                    
-                    _tangents.Add(new Vector4());
-                    _tangents.Add(new Vector4());
-                    _tangents.Add(new Vector4());
-                    
-                    _uvs.Add(new Vector2());
-                    _uvs.Add(new Vector2());
-                    _uvs.Add(new Vector2());
-                    
+                    CreatePlaneSliceTriangle(slicePlane[i][j], -localNormal, n+0, n+1, n+2);
+                    CreatePlaneSliceTriangle(slicePlane[i][j], -localNormal, n+2, n+1, n+0);
                 }
             }
             
@@ -96,7 +77,6 @@ namespace src
             _planeNormal = planeNormal;
             _planePoint = planePoint;
             _srcObject = srcObject;
-            _mesh = mesh;
             _wholeSlicePlane = new WholeSlicePlane(srcObject.transform.InverseTransformPoint(planeNormal));
             
             _verts = new List<Vector3>();
@@ -112,7 +92,6 @@ namespace src
             _planeNormal = planeNormal;
             _planePoint = planePoint;
             _srcObject = srcObject;
-            _mesh = mesh;
             _wholeSlicePlane = new WholeSlicePlane(srcObject.transform.InverseTransformPoint(planeNormal));
             
             _verts = new List<Vector3>(mesh.vertices);
@@ -159,20 +138,23 @@ namespace src
             var localRightPoint1 = _srcObject.transform.InverseTransformPoint(rightPoint1);
             var localRightPoint2 = _srcObject.transform.InverseTransformPoint(rightPoint2);
 
-            AddTangents(_tangents[t0], _tangents[t1],
-                _tangents[t2]);
+            if (_tangents.Any())
+                AddTangents(_tangents[t0], _tangents[t1], _tangents[t2]);
 
-            var b1 = new Barycentric(localLeftPoint1, localRightPoint1, localRightPoint2, localIntersectionPoint1);
-            var localIntersectionPoint1Uv = b1.Interpolate(_uvs[t0],
-                _uvs[t1],
-                _uvs[t2]);
+            if (_uvs.Any())
+            {
+                var b1 = new Barycentric(localLeftPoint1, localRightPoint1, localRightPoint2, localIntersectionPoint1);
+                var localIntersectionPoint1Uv = b1.Interpolate(_uvs[t0],
+                    _uvs[t1],
+                    _uvs[t2]);
 
-            var b2 = new Barycentric(localLeftPoint1, localRightPoint1, localRightPoint2, localIntersectionPoint2);
-            var localIntersectionPoint2Uv = b2.Interpolate(_uvs[t0],
-                _uvs[t1],
-                _uvs[t2]);
+                var b2 = new Barycentric(localLeftPoint1, localRightPoint1, localRightPoint2, localIntersectionPoint2);
+                var localIntersectionPoint2Uv = b2.Interpolate(_uvs[t0],
+                    _uvs[t1],
+                    _uvs[t2]);
 
-            AddUVs(_uvs[t0], localIntersectionPoint1Uv, localIntersectionPoint2Uv);
+                AddUVs(_uvs[t0], localIntersectionPoint1Uv, localIntersectionPoint2Uv);
+            }
 
             var b3 = new Barycentric(localLeftPoint1, localRightPoint1, localRightPoint2, localIntersectionPoint1);
             var localIntersectionPoint1Normal = b3.Interpolate(_normals[t0],
@@ -222,27 +204,26 @@ namespace src
             int t2 = _triangles2[i + n2];
             var localRightPoint1 = _srcObject.transform.InverseTransformPoint(rightPoint1);
 
-            AddTangents(_tangents[t0],
-                _tangents[t1],
-                _tangents[t2],
-                _tangents[t2]);
+            if (_tangents.Any())
+                AddTangents(_tangents[t0], _tangents[t1], _tangents[t2], _tangents[t2]);
 
+            if (_uvs.Any())
+            {
+                var b1 = new Barycentric(localLeftPoint1, localLeftPoint2, localRightPoint1, localIntersectionPoint1);
+                var intersectionPoint1Uv = b1.Interpolate(_uvs[t0],
+                    _uvs[t1],
+                    _uvs[t2]);
 
-            var b1 = new Barycentric(localLeftPoint1, localLeftPoint2, localRightPoint1, localIntersectionPoint1);
-            var intersectionPoint1Uv = b1.Interpolate(_uvs[t0],
-                _uvs[t1],
-                _uvs[t2]);
+                var b2 = new Barycentric(localLeftPoint1, localLeftPoint2, localRightPoint1, localIntersectionPoint2);
+                var intersectionPoint2Uv = b2.Interpolate(_uvs[t0],
+                    _uvs[t1],
+                    _uvs[t2]);
 
-            var b2 = new Barycentric(localLeftPoint1, localLeftPoint2, localRightPoint1, localIntersectionPoint2);
-            var intersectionPoint2Uv = b2.Interpolate(_uvs[t0],
-                _uvs[t1],
-                _uvs[t2]);
-
-            AddUVs(_uvs[t0],
-                _uvs[t1],
-                intersectionPoint1Uv,
-                intersectionPoint2Uv);
-
+                AddUVs(_uvs[t0],
+                    _uvs[t1],
+                    intersectionPoint1Uv,
+                    intersectionPoint2Uv);
+            }
 
             var b3 = new Barycentric(localLeftPoint1, localLeftPoint2, localRightPoint1, localIntersectionPoint1);
             var localIntersectionPoint1Normal = b3.Interpolate(_normals[t0],

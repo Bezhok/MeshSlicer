@@ -31,7 +31,7 @@ namespace src
             _prevSlicerPos = slicerQuad.transform.position;
             _prevSlicerRotation = slicerQuad.transform.rotation.eulerAngles;
 
-            Test.g = srcObject;
+            Test.obj = srcObject;
         }
 
         private void Update()
