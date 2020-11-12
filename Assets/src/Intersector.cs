@@ -58,6 +58,7 @@ namespace src
                 {
                     int n = _verts.Count;
                     CreatePlaneSliceTriangle(slicePlane[i][j], -localNormal, n+0, n+1, n+2);
+                    n = _verts.Count;
                     CreatePlaneSliceTriangle(slicePlane[i][j], -localNormal, n+2, n+1, n+0);
                 }
             }

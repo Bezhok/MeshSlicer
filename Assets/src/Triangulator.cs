@@ -1,17 +1,12 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.Assertions.Comparers;
 
 namespace src
 {
     public class Triangulator
     {
-        private class Edge
-        {
-            public LinkedListNode<MappedPoint> f, s, discret;
-            public Vector2 inter;
-        }
-        
         private readonly HashSet<LinkedListNode<MappedPoint>> _convexVerts = new HashSet<LinkedListNode<MappedPoint>>();
         private readonly HashSet<LinkedListNode<MappedPoint>> _earsVerts = new HashSet<LinkedListNode<MappedPoint>>();
         private readonly LinkedList<MappedPoint> _pointsN;
@@ -28,31 +23,108 @@ namespace src
             }
         }
 
-        private List<Edge> IntersectedEdges(Vector2 child, SliceHierarchy father)
+        public Triangulator(SliceHierarchy sliceHierarchy)
+        {
+            //even should be counterclockwise
+            ReverseIfShould(sliceHierarchy);
+
+            sliceHierarchy.Childs.RemoveAll(item => item == null);
+            sliceHierarchy.Childs = new List<SliceHierarchy>(sliceHierarchy.Childs.OrderByDescending(x => x.MaxX));
+
+            for (var j = 0; j < sliceHierarchy.Childs.Count; j++)
+            {
+                var child = sliceHierarchy.Childs[j];
+                if (child == null) continue;
+
+                //odd should be clockwise
+                ReverseIfShould(child);
+
+                // child point with max x
+                var childMaxX = child.MaxX;
+                LinkedListNode<MappedPoint> childMaxXObj = null;
+
+                for (var p = child.Points.First; p != null; p = p.Next)
+                    if (p.Value.v2.x == childMaxX)
+                        childMaxXObj = p;
+
+                //intersected edges
+                var interEdges = IntersectedEdges(childMaxXObj.Value.v2, child.Father, new Vector2(1000000f, 0));
+                if (!interEdges.Any()) continue;
+
+                // nearest edge
+                var nearestEdgeDist = interEdges.Min(x => Mathf.Abs(x.MaxXdiscret.Value.v2.x - childMaxXObj.Value.v2.x));
+                Edge nearestEdge = null;
+                foreach (var e in interEdges)
+                    if (Mathf.Abs(e.MaxXdiscret.Value.v2.x - childMaxXObj.Value.v2.x) == nearestEdgeDist)
+                    {
+                        nearestEdge = e;
+                        break;
+                    }
+
+
+                // childMaxX..............................nearestEdge.Inter
+                // .................MinAnglePoint.........
+                // .................................P2....
+                // .......................................nearestEdge.discret
+                var pointsInTriangle = PointsInTriangle(
+                    child.Father.Points,
+                    childMaxXObj.Value.v2,
+                    nearestEdge.MaxXdiscret.Value.v2,
+                    nearestEdge.Inter);
+
+
+                // if points were caught than should pick with smallest angle
+                if (pointsInTriangle.Any())
+                {
+                    var minAngleObj = pointsInTriangle
+                        .OrderBy(x => 
+                            Vector2.Angle(nearestEdge.Inter - childMaxXObj.Value.v2, x.Value.v2 - childMaxXObj.Value.v2))
+                        .ThenBy(x => Mathf.Abs(x.Value.v2.x - childMaxXObj.Value.v2.x)).First();
+
+                    nearestEdge.MaxXdiscret = minAngleObj;
+                }
+                
+                //intersected edges
+                var selfInterEdges = IntersectedEdges(childMaxXObj.Value.v2, child, nearestEdge.MaxXdiscret.Value.v2);
+                if (selfInterEdges.Any())
+                    childMaxXObj = selfInterEdges
+                        .OrderBy(x => Vector2.Distance(x.MaxXdiscret.Value.v2, nearestEdge.MaxXdiscret.Value.v2))
+                        .First()
+                        .MaxXdiscret;
+
+                // union father and child
+                UnionFatherAndChildPoints(
+                    child,
+                    child.Father,
+                    childMaxXObj,
+                    nearestEdge.MaxXdiscret);
+
+                sliceHierarchy.Childs[j] = null;
+            }
+
+            _pointsN = sliceHierarchy.Points;
+        }
+
+        private List<Edge> IntersectedEdges(Vector2 edgeStart, SliceHierarchy father, Vector2 edgeEnd)
         {
             var interEdges = new List<Edge>();
-            
-            //ray
-            var end = new Vector2(father.maxX + 100, child.y);
-            for (var p = father._points.First; p != null; p = p.Next)
-            {
-                var interPoint = WholeSlicePlane.LinesIntersection(
-                    child,
-                    end,
-                    p.Value.v2,
-                    Next(p).Value.v2);
-                    
-                //intersection point with father(outer) points
-                if (WholeSlicePlane.IsPointOnSection(interPoint, p.Value.v2, Next(p).Value.v2) &&
-                    WholeSlicePlane.IsPointOnSection(interPoint, child, end))
-                {
-                    LinkedListNode<MappedPoint> point = null;
-                    if (p.Value.v2.x > Next(p).Value.v2.x)
-                        point = p;
-                    else
-                        point = Next(p);
 
-                    var edge = new Edge {f = point, s = point, discret = p, inter = interPoint};
+            for (var p = father.Points.First; p != null; p = p.Next)
+            {
+                if (p.Value.v2.Equals(edgeStart)) continue;
+                
+                var areIntersect = WholeSlicePlane.LineSegmentsIntersection(
+                    edgeStart,
+                    edgeEnd,
+                    p.Value.v2,
+                    LinkedListExtensions.Next(p).Value.v2, out var interPoint);
+
+                //intersection point with father(outer) points
+                if (areIntersect)
+                {
+                    var point = p.Value.v2.x > LinkedListExtensions.Next(p).Value.v2.x ? p : LinkedListExtensions.Next(p);
+
+                    var edge = new Edge {FDiscret = p, SDiscret = LinkedListExtensions.Next(p), MaxXdiscret = point, Inter = interPoint};
                     interEdges.Add(edge);
                 }
             }
@@ -60,17 +132,15 @@ namespace src
             return interEdges;
         }
 
-        private List<LinkedListNode<MappedPoint>> PointsInTriangle(LinkedList<MappedPoint> points,  Vector2 p0, Vector2 p1, Vector2 p2)
+        private List<LinkedListNode<MappedPoint>> PointsInTriangle(LinkedList<MappedPoint> points, Vector2 p0,
+            Vector2 p1, Vector2 p2)
         {
             var pointsInTriangle = new List<LinkedListNode<MappedPoint>>();
 
             for (var p = points.First; p != null; p = p.Next)
             {
                 var isPointInTriangle = IsPointInTriangle(p.Value.v2, p0, p1, p2);
-                if (isPointInTriangle)
-                {
-                    pointsInTriangle.Add(p);
-                }
+                if (isPointInTriangle) pointsInTriangle.Add(p);
             }
 
             return pointsInTriangle;
@@ -78,117 +148,33 @@ namespace src
 
         private void ReverseIfShould(SliceHierarchy sliceHierarchy)
         {
-            if (sliceHierarchy.level % 2 == 0)
+            if (sliceHierarchy.Level % 2 == 0)
             {
-                if (!ArePointsCounterClockwise(sliceHierarchy._points))
-                {
-                    sliceHierarchy._points = ReversedLinkedList(sliceHierarchy._points);
-                }
+                if (!ArePointsCounterClockwise(sliceHierarchy.Points))
+                    sliceHierarchy.Points = LinkedListExtensions.ReversedLinkedList(sliceHierarchy.Points);
             }
             else
             {
-                if (ArePointsCounterClockwise(sliceHierarchy._points))
-                {
-                    sliceHierarchy._points = ReversedLinkedList(sliceHierarchy._points);
-                }
+                if (ArePointsCounterClockwise(sliceHierarchy.Points))
+                    sliceHierarchy.Points = LinkedListExtensions.ReversedLinkedList(sliceHierarchy.Points);
             }
         }
-        
-        public Triangulator(SliceHierarchy sliceHierarchy)
-        {
-            //even should be counterclockwise
-            ReverseIfShould(sliceHierarchy);
 
-            sliceHierarchy.childs.RemoveAll(item => item == null);
-            sliceHierarchy.childs = new List<SliceHierarchy>(sliceHierarchy.childs.OrderByDescending(x => x.maxX));
-
-            for (var j = 0; j < sliceHierarchy.childs.Count; j++)
-            {
-                var child = sliceHierarchy.childs[j];
-                if (child == null) continue;
-
-                //odd should be clockwise
-                ReverseIfShould(child);
-
-                // child point with max x
-                var childMaxX = child.maxX;
-                LinkedListNode<MappedPoint> childMaxXObj = null;
-                for (var p = child._points.First; p != null; p = p.Next)
-                    if (p.Value.v2.x == childMaxX) { childMaxXObj = p; break;}
-                
-                //intersected edges
-                var interEdges = IntersectedEdges(childMaxXObj.Value.v2, child.father);
-                if(!interEdges.Any()) continue;
-
-                // nearest edge
-                var nearestEdgeDist = interEdges.Min(x => Mathf.Abs(x.discret.Value.v2.x - childMaxXObj.Value.v2.x));
-                Edge nearestEdge = null;
-                for (var i = 0; i < interEdges.Count; i++)
-                    if (Mathf.Abs(interEdges[i].discret.Value.v2.x - childMaxXObj.Value.v2.x)==nearestEdgeDist)
-                    { nearestEdge = interEdges[i]; break; }
-                
-                // childMaxX..............................nearestEdge.Inter
-                // .................MinAnglePoint.........
-                // .................................P2....
-                // .......................................nearestEdge.discret
-                var pointsInTriangle = PointsInTriangle(
-                    child.father._points,
-                    childMaxXObj.Value.v2,
-                    nearestEdge.discret.Value.v2,
-                    nearestEdge.inter);
-                
-                // if points were catched than should pick with smallest angle
-                if (pointsInTriangle.Any())
-                {
-                    var minAngleObj = pointsInTriangle.OrderBy(x =>
-                            Vector2.Angle(nearestEdge.inter - childMaxXObj.Value.v2,
-                            x.Value.v2 - childMaxXObj.Value.v2)
-                    ).ThenBy(x => 
-                        Mathf.Abs(x.Value.v2.x - childMaxXObj.Value.v2.x)).First();
-
-                     nearestEdge.discret = minAngleObj;
-                }
-
-                // union father and child
-                UnionFatherAndChildPoints(
-                    child,
-                    child.father,
-                    childMaxXObj,
-                    nearestEdge.discret);
-                
-                sliceHierarchy.childs[j] = null;
-            }
-
-            _pointsN = sliceHierarchy._points;
-        }
-        
-        private void UnionFatherAndChildPoints(SliceHierarchy child, SliceHierarchy father, LinkedListNode<MappedPoint> childStartPoint, LinkedListNode<MappedPoint> fatherStartPoint)
+        private void UnionFatherAndChildPoints(SliceHierarchy child, SliceHierarchy father,
+            LinkedListNode<MappedPoint> childStartPoint, LinkedListNode<MappedPoint> fatherStartPoint)
         {
             var prev = fatherStartPoint;
-            for (var p3 = childStartPoint; p3 != Previous(childStartPoint); p3 = Next(p3))
-                prev = father._points.AddAfter(prev, p3.Value);
+            for (var p3 = childStartPoint; p3 != LinkedListExtensions.Previous(childStartPoint); p3 = LinkedListExtensions.Next(p3))
+                prev = father.Points.AddAfter(prev, p3.Value);
 
-            prev = father._points
-                .AddAfter(prev, Previous(childStartPoint).Value);
-            prev = father._points.AddAfter(prev, childStartPoint.Value);
-            prev = father._points.AddAfter(prev, fatherStartPoint.Value);
+            prev = father.Points
+                .AddAfter(prev, LinkedListExtensions.Previous(childStartPoint).Value);
+            prev = father.Points.AddAfter(prev, childStartPoint.Value);
+            father.Points.AddAfter(prev, fatherStartPoint.Value);
 
-            father.maxX =
-                father._points.Max(x => x.v2.x);
+            father.MaxX = Mathf.Max(father.MaxX, child.MaxX);
         }
         
-        public static LinkedList<T> ReversedLinkedList<T>(LinkedList<T> linkedList)
-        {
-            var copyList = new LinkedList<T>();
-            var start = linkedList.Last;
-            while (start != null)
-            {
-                copyList.AddLast(start.Value);
-                start = start.Previous;
-            }
-
-            return copyList;
-        }
 
         private bool ArePointsCounterClockwise(LinkedList<MappedPoint> testPoints)
         {
@@ -206,7 +192,7 @@ namespace src
         public List<Triangle> Triangulate()
         {
             for (var p = _pointsN.First; p != null; p = p.Next)
-                if (IsVertConvex(Previous(p).Value, p.Value, Next(p).Value))
+                if (IsVertConvex(LinkedListExtensions.Previous(p).Value, p.Value, LinkedListExtensions.Next(p).Value))
                     _convexVerts.Add(p);
                 else
                     _reflexVerts.Add(p);
@@ -215,43 +201,44 @@ namespace src
                 if (ShouldAddConvexToEar(node))
                     _earsVerts.Add(node);
 
-            while (_earsVerts.Any())
-            {
-                var node = _earsVerts.First();
-                var prevNode = Previous(node);
-                var nextNode = Next(node);
-
-                _earsVerts.Remove(node);
-                _triangles.Add(new Triangle(prevNode.Value, node.Value, nextNode.Value));
-                _pointsN.Remove(node);
-
-                ////// update convex and reflex and points
-                if (_convexVerts.Contains(prevNode))
-                    UpdateSiblingConvexDeleting(prevNode);
-
-                if (_convexVerts.Contains(nextNode))
-                    UpdateSiblingConvexDeleting(nextNode);
-
-                if (_convexVerts.Contains(node))
-                    _convexVerts.Remove(node);
-
-                if (_reflexVerts.Contains(prevNode))
-                    UpdateSiblingReflexDeleting(prevNode);
-
-                if (_reflexVerts.Contains(nextNode))
-                    UpdateSiblingReflexDeleting(nextNode);
-            }
+            while (_earsVerts.Any()) CreateTriangle();
 
             return _triangles;
+        }
+
+        private void CreateTriangle()
+        {
+            var node = _earsVerts.First();
+            var prevNode = LinkedListExtensions.Previous(node);
+            var nextNode = LinkedListExtensions.Next(node);
+
+            _earsVerts.Remove(node);
+            _triangles.Add(new Triangle(prevNode.Value, node.Value, nextNode.Value));
+            _pointsN.Remove(node);
+
+            ////// update convex and reflex and points
+            if (_convexVerts.Contains(prevNode))
+                UpdateSiblingConvexDeleting(prevNode);
+
+            if (_convexVerts.Contains(nextNode))
+                UpdateSiblingConvexDeleting(nextNode);
+
+            if (_convexVerts.Contains(node))
+                _convexVerts.Remove(node);
+
+            if (_reflexVerts.Contains(prevNode))
+                UpdateSiblingReflexDeleting(prevNode);
+
+            if (_reflexVerts.Contains(nextNode))
+                UpdateSiblingReflexDeleting(nextNode);
         }
 
         private void UpdateSiblingConvexDeleting(LinkedListNode<MappedPoint> node)
         {
             if (!IsVertConvex(
-                Previous(node).Value,
+                LinkedListExtensions.Previous(node).Value,
                 node.Value,
-                Next(node).Value)
-            )
+                LinkedListExtensions.Next(node).Value))
             {
                 _earsVerts.Remove(node);
                 _reflexVerts.Add(node);
@@ -259,17 +246,23 @@ namespace src
             }
             else
             {
-                if (!ShouldAddConvexToEar(node)) _earsVerts.Remove(node);
-                else _earsVerts.Add(node);
+                if (!ShouldAddConvexToEar(node))
+                {
+                    _earsVerts.Remove(node);
+                }
+                else
+                {
+                    if (!_earsVerts.Contains(node)) _earsVerts.Add(node);
+                }
             }
         }
 
         private void UpdateSiblingReflexDeleting(LinkedListNode<MappedPoint> node)
         {
             if (IsVertConvex(
-                Previous(node).Value,
+                LinkedListExtensions.Previous(node).Value,
                 node.Value,
-                Next(node).Value))
+                LinkedListExtensions.Next(node).Value))
             {
                 _convexVerts.Add(node);
                 if (ShouldAddConvexToEar(node)) _earsVerts.Add(node);
@@ -277,50 +270,30 @@ namespace src
             }
         }
 
-        public static LinkedListNode<MappedPoint> Next(LinkedListNode<MappedPoint> n)
+        public bool IsVertConvex(MappedPoint prev, MappedPoint curr, MappedPoint next)
         {
-            if (n.List.Last == n)
-                return n.List.First;
-            return n.Next;
-        }
-
-        public static LinkedListNode<MappedPoint> Previous(LinkedListNode<MappedPoint> n)
-        {
-            if (n.List.First == n)
-                return n.List.Last;
-            return n.Previous;
-        }
-
-        public static bool IsVertConvex(MappedPoint prev, MappedPoint curr, MappedPoint next)
-        {
-            return prev.v2.x * (next.v2.y - curr.v2.y) + curr.v2.x * (prev.v2.y - next.v2.y) +
-                next.v2.x * (curr.v2.y - prev.v2.y) < 0;
-        }
-
-        public static bool IsVertConvex(Vector2 prev, Vector2 curr, Vector2 next)
-        {
-            return prev.x * (next.y - curr.y) + curr.x * (prev.y - next.y) + next.x * (curr.y - prev.y) < 0;
-        }
-
-        public static bool IsVertConvex(Vector3 p1, Vector3 p2, Vector3 p3)
-        {
-            return p1.x * p2.y * p3.z + p1.y * p2.z * p3.x + p1.z * p2.x * p3.y - p1.z * p2.y * p3.x -
-                p1.x * p2.z * p3.y - p1.y * p2.x * p3.z > 0;
+            float area = 0;
+            
+                area += (next.v2.x - curr.v2.x) * (next.v2.y + curr.v2.y);
+                area += (curr.v2.x - prev.v2.x) * (curr.v2.y + prev.v2.y);
+                area += (prev.v2.x - next.v2.x) * (prev.v2.y + next.v2.y);
+            
+            return area < 0;
         }
 
         private bool ShouldAddConvexToEar(LinkedListNode<MappedPoint> node)
         {
             for (var p = _pointsN.First; p != null; p = p.Next)
                 if (
-                    !Previous(node).Value.v2.Equals(p.Value.v2) &&
+                    !LinkedListExtensions.Previous(node).Value.v2.Equals(p.Value.v2) &&
                     !node.Value.v2.Equals(p.Value.v2) &&
-                    !Next(node).Value.v2.Equals(p.Value.v2)
+                    !LinkedListExtensions.Next(node).Value.v2.Equals(p.Value.v2)
                 )
                     if (IsPointInTriangle(
                         p.Value,
-                        Previous(node).Value,
+                        LinkedListExtensions.Previous(node).Value,
                         node.Value,
-                        Next(node).Value)
+                        LinkedListExtensions.Next(node).Value)
                     )
                         return false;
 
@@ -347,15 +320,13 @@ namespace src
             var p1 = mp1.v2;
             var p2 = mp2.v2;
 
-            var s = p0.y * p2.x - p0.x * p2.y + (p2.y - p0.y) * p.x + (p0.x - p2.x) * p.y;
-            var t = p0.x * p1.y - p0.y * p1.x + (p0.y - p1.y) * p.x + (p1.x - p0.x) * p.y;
+            return IsPointInTriangle(p, p0, p1, p2);
+        }
 
-            if (s < 0 != t < 0)
-                return false;
-
-            var a = -p1.y * p2.x + p0.y * (p2.x - p1.x) + p0.x * (p1.y - p2.y) + p1.x * p2.y;
-
-            return a < 0 ? s <= 0 && s + t >= a : s >= 0 && s + t <= a;
+        private class Edge
+        {
+            public LinkedListNode<MappedPoint> FDiscret, SDiscret, MaxXdiscret;
+            public Vector2 Inter;
         }
     }
 }

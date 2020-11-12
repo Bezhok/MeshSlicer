@@ -39,6 +39,7 @@ namespace src
             if ((slicerQuad.transform.position - _prevSlicerPos).magnitude > 0.001f ||
                 (slicerQuad.transform.rotation.eulerAngles - _prevSlicerRotation).magnitude > 0.001f)
             {
+                Test.gizmos.Clear();
                 var slicerNormal = slicerQuad.transform.TransformDirection(_slicerMesh.normals[0]);
                 var slicerPoint = slicerQuad.transform.TransformPoint(_slicerMesh.vertices[0]);
                 
