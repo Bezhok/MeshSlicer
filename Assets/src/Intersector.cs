@@ -64,6 +64,10 @@ namespace src
             }
             
             var newMesh = new Mesh();
+            if (_verts.Count > 65534) {
+                newMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            }
+            
             newMesh.vertices = _verts.ToArray();
             newMesh.normals = _normals.ToArray();
             newMesh.uv = _uvs.ToArray();
